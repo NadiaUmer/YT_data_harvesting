@@ -18,7 +18,7 @@ connection = pymysql.connect(
     host= "127.0.0.1",
     port= 3306,
     user= "root",
-    password= "Umer@80199",
+    password= "password",
     database="YT_database"
 )
 
@@ -100,7 +100,7 @@ mysql_connection = mysql.connector.connect(
     host= "127.0.0.1",
     port= 3306,
     user= "root",
-    password= "Umer@80199",
+    password= "password",
     database="YT_database"
 )
 mysql_cursor = mysql_connection.cursor()
@@ -151,7 +151,7 @@ mysql_connection = mysql.connector.connect(
      host= "127.0.0.1",
     port= 3306,
     user= "root",
-    password= "Umer@80199",
+    password= "password",
     database="YT_database"
 )
 mysql_cursor = mysql_connection.cursor()
@@ -331,7 +331,7 @@ def main():
     # YouTube service client setup
     api_service_name = "youtube"
     api_version = "v3"
-    youtube = build(api_service_name, api_version, developerKey="AIzaSyB1HEF02JEjhjEdGCUAzaQ6la2uOFOZ5V0")
+    youtube = build(api_service_name, api_version, developerKey=API_key)
 
     # ============    /   Configuring Streamlit GUI   /    ============    #
 
