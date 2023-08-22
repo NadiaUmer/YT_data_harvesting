@@ -1,0 +1,425 @@
+pip install streamlit
+
+from googleapiclient.discovery import build
+# [MngoDB]
+from pymongo import MongoClient
+# [Dashboard library]
+import streamlit as st
+# [File handling]
+import re
+
+pip install pymysql
+
+#connecting to mysql
+import pymysql
+
+# Set up the connection parameters
+connection = pymysql.connect(
+    host= "127.0.0.1",
+    port= 3306,
+    user= "root",
+    password= "Umer@80199",
+    database="YT_database"
+)
+
+# Establish the connection
+if connection.open:
+    print("Connected to MySQL database")
+
+#calculating the total duration of the playlist
+def parse_duration(duration):
+    
+    duration_regex = r'PT((\d+)H)?((\d+)M)?((\d+)S)?'
+    matches = re.match(duration_regex, duration)
+    # Period of Time timestamp(string) to seconds(int)
+    if matches:
+       
+        hours = int(matches.group(2) or 0)
+        minutes = int(matches.group(4) or 0)
+        seconds = int(matches.group(6) or 0)
+        total_seconds = hours * 3600 + minutes * 60 + seconds
+        return total_seconds
+
+    return 0
+
+#Extracting data from YT
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+
+# Set up the API client
+#api_key = "<add-your-api-key-here>"
+youtube = build('youtube', 'v3', developerKey=API_key)
+
+# Get the channel ID
+channel_name = "WB Kids"
+request = youtube.search().list(q=channel_name, type='channel', part='id', maxResults=1)
+response = request.execute()
+channel_id = response['items'][0]['id']['channelId']
+
+# Use the channel ID to get the channel statistics
+request = youtube.channels().list(part='statistics', id=channel_id)
+response = request.execute()
+
+# Print the statistics
+print(f"Channel name: {channel_name}")
+print(f"Channel ID: {channel_id}")
+print("View Count: " + response['items'][0]['statistics']['viewCount'])
+print("Subscriber Count: " + response['items'][0]['statistics']['subscriberCount'])
+print("Video Count: " + response['items'][0]['statistics']['videoCount'])
+print(response['items'][0])
+
+# Function to migrate data to MongoDB
+def migrate_data_to_mongodb(channel_id):
+    youtube = build("youtube", "v3", developerKey=api_key)
+    channel_data = get_channel_data(youtube, channel_id)
+    channels_collection = db["migrated_channels"]
+    # channels_collection.insert_one(channel_data)
+    # return channel_data
+
+    # Check if channel data already exists
+    existing_data = channels_collection.find_one({"ChannelId": channel_id})
+
+    if existing_data:
+        # Update the existing channel data
+        channels_collection.update_one({"ChannelId": channel_id}, {"$set": channel_data})
+    else:
+        # Insert the new channel data
+        channel_data["ChannelId"] = channel_id
+        channels_collection.insert_one(channel_data)
+#Migrating data from Mongodb to mysql
+import mysql.connector
+from pymongo import MongoClient
+
+# Establish MongoDB connection
+mongo_client = MongoClient("mongodb://localhost:27017/")
+mongo_db = mongo_client["your_mongodb_database"]
+mongo_collection = mongo_db["migrated_channels"]
+
+# Establish MySQL connection
+mysql_connection = mysql.connector.connect(
+    host= "127.0.0.1",
+    port= 3306,
+    user= "root",
+    password= "Umer@80199",
+    database="YT_database"
+)
+mysql_cursor = mysql_connection.cursor()
+
+def migrate_data_to_mysql(channel_id):
+    # Retrieve channel data from MongoDB
+    channel_data = mongo_collection.find_one({"ChannelId": channel_id})
+
+    if channel_data:
+        # Check if channel data already exists
+        mysql_cursor.execute("SELECT COUNT(*) FROM channel WHERE channel_id = %s", (channel_id,))
+        result = mysql_cursor.fetchone()
+        
+        if result[0] > 0:
+            print("Channel data already exists in MySQL. Migrating updated channel data")
+            # Uses "ON DELETE CASCADE" to delete all corresponding details of given channel id
+            mysql_cursor.execute("DELETE FROM channel WHERE channel_id= %s", (channel_id,))
+        
+        # Migrate channel data to MySQL
+        insert_query = """
+            INSERT INTO channel (channel_id, channel_name, subscribers, total_videos)
+            VALUES (%s, %s, %s, %s)
+        """
+        values = (
+            channel_data["ChannelId"],
+            channel_data["ChannelName"],
+            channel_data["Subscribers"],
+            channel_data["TotalVideos"]
+        )
+        mysql_cursor.execute(insert_query, values)
+        mysql_connection.commit()
+
+        print("Channel data migrated to MySQL")
+
+# Call the function with the desired channel_id
+migrate_data_to_mysql("your_channel_id")
+
+import mysql.connector
+from pymongo import MongoClient
+
+# Establish MongoDB connection
+mongo_client = MongoClient("mongodb://localhost:27017/")
+mongo_db = mongo_client["your_mongodb_database"]
+mongo_collection = mongo_db["migrated_channels"]
+
+# Establish MySQL connection
+mysql_connection = mysql.connector.connect(
+     host= "127.0.0.1",
+    port= 3306,
+    user= "root",
+    password= "Umer@80199",
+    database="YT_database"
+)
+mysql_cursor = mysql_connection.cursor()
+
+def migrate_data_to_mysql(channel_id):
+    # Retrieve channel data from MongoDB
+    channel_data = mongo_collection.find_one({"ChannelId": channel_id})
+
+    if channel_data:
+        # Check if channel data already exists
+        mysql_cursor.execute("SELECT COUNT(*) FROM channel WHERE channel_id = %s", (channel_id,))
+        result = mysql_cursor.fetchone()
+        if result[0] > 0:
+            print("Channel data already exists in MySQL. Migrating updated channel data")
+            # Uses "ON DELETE CASCADE" to delete all corresponding details of given channel id
+            mysql_cursor.execute("DELETE FROM channel WHERE channel_id= %s", (channel_id,))
+
+        # Insert channel data into MySQL
+        insert_channel_query = """
+            INSERT INTO channel (channel_id, channel_name, channel_views, channel_description)
+            VALUES (%s, %s, %s, %s)
+        """
+        channel_values = (
+            channel_data["ChannelId"],
+            channel_data["Channel name"],
+            int(channel_data["Channel view count"]),
+            channel_data["Channel description"]
+        )
+        mysql_cursor.execute(insert_channel_query, channel_values)
+
+        # Insert playlist data into MySQL
+        insert_playlist_query = """
+            INSERT INTO playlist (playlist_id, channel_id)
+            VALUES (%s, %s)
+        """
+        playlist_values = (
+            channel_data["PlaylistId"],
+            channel_data["ChannelId"]
+        )
+        mysql_cursor.execute(insert_playlist_query, playlist_values)
+
+        # Insert video, comment data into MySQL
+        for video in channel_data["Videos"]:
+            duration_seconds = parse_duration(video.get("duration", "PT0S"))
+
+            insert_video_query = """
+                INSERT INTO video (video_id, playlist_id, video_name, video_description, published_date,
+                                   view_count, like_count, favorite_count, comment_count, duration,
+                                   thumbnail, caption_status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            video_values = (
+                video["video_id"],
+                channel_data["PlaylistId"],
+                video["title"],
+                video["description"],
+                video["publishedAt"],
+                int(video["viewCount"]),
+                int(video["likeCount"]),
+                int(video["favoriteCount"]),
+                int(video["commentCount"]),
+                duration_seconds,
+                video["thumbnail_url"],
+                video["caption"]
+            )
+            mysql_cursor.execute(insert_video_query, video_values)
+
+            for comment in video.get("Comments", []):
+                insert_comment_query = """
+                    INSERT INTO comment (comment_id, video_id, comment_text, comment_author, comment_published_date)
+                    VALUES (%s, %s, %s, %s, %s)
+                """
+                comment_values = (
+                    comment["Comment_Id"],
+                    video["video_id"],
+                    comment["Comment_Text"],
+                    comment["Comment_Author"],
+                    comment["Comment_PublishedAt"]
+                )
+                mysql_cursor.execute(insert_comment_query, comment_values)
+
+        mysql_connection.commit()
+        print("Data migrated to MySQL")
+    else:
+        print("No data found for the provided channel ID")
+
+# Call the function with the desired channel_id
+migrate_data_to_mysql("your_channel_id")
+
+# Close the MySQL connection
+mysql_cursor.close()
+mysql_connection.close()
+
+ # Define the SQL queries
+    queries = {
+        "1. What are the names of all the videos and their corresponding channels?": """
+            SELECT video_name, channel_name
+            FROM video
+            JOIN playlist ON video.playlist_id = playlist.playlist_id
+            JOIN channel ON playlist.channel_id = channel.channel_id
+        """,
+        "2. Which channels have the most number of videos, and how many videos do they have?": """
+            SELECT c.channel_name, COUNT(v.video_id)
+            FROM channel c
+            JOIN playlist p ON c.channel_id = p.channel_id
+            JOIN video v ON p.playlist_id = v.playlist_id
+            GROUP BY c.channel_name
+            HAVING COUNT(v.video_id) = (
+                SELECT COUNT(video_id) AS video_count
+                FROM channel
+                JOIN playlist ON channel.channel_id = playlist.channel_id
+                JOIN video ON playlist.playlist_id = video.playlist_id
+                GROUP BY channel_name
+                ORDER BY video_count DESC
+                LIMIT 1
+            )
+        """,
+        "3. What are the top 10 most viewed videos and their respective channels?": """
+                SELECT video.video_name, channel_name, video.view_count
+                FROM channel
+                JOIN playlist ON channel.channel_id = playlist.channel_id
+                JOIN video ON playlist.playlist_id = video.playlist_id
+                ORDER BY view_count DESC
+                LIMIT 10
+            """,
+        "4. How many comments were made on each video, and what are their corresponding video names?": """
+                    SELECT video_name, COUNT(comment_id) AS comment_count
+                    FROM video
+                    JOIN comment ON video.video_id = comment.video_id
+                    GROUP BY video_name
+                    ORDER BY comment_count DESC
+                """,
+        "5. Which videos have the highest number of likes, and what are their corresponding channel names?": """
+                    SELECT video.video_name, channel.channel_name
+                    FROM channel
+                    JOIN playlist ON channel.channel_id = playlist.channel_id
+                    JOIN video ON playlist.playlist_id = video.playlist_id
+                    where like_count = (select max(like_count) from video)
+                """,
+        "6. What is the total number of likes and favorites for each video, and what are their corresponding video names?": """
+                    SELECT video_name, like_count, favorite_count
+                    FROM video
+                    ORDER BY like_count DESC, favorite_count DESC
+                """,
+        "7. What is the total number of views for each channel, and what are their corresponding channel names?": """
+                    SELECT channel_name,channel_views
+                    FROM channel
+                    ORDER BY channel_views DESC
+                """,
+        "8. What are the names of all the channels that have published videos in the year 2022?": """
+                    SELECT DISTINCT(channel_name)
+                    FROM channel
+                    JOIN playlist ON channel.channel_id = playlist.channel_id
+                    JOIN video ON playlist.playlist_id = video.playlist_id
+                    WHERE EXTRACT(YEAR FROM video.published_date) = 2022
+                """,
+        "9. What is the average duration of all videos in each channel, and what are their corresponding channel names?": """
+                    SELECT channel_name, AVG(duration)
+                    FROM channel
+                    JOIN playlist ON channel.channel_id = playlist.channel_id
+                    JOIN video ON playlist.playlist_id = video.playlist_id
+                    GROUP BY channel_name
+                    ORDER BY AVG(duration) DESC
+                """,
+        "10. Which videos have the highest number of comments, and what are their corresponding channel names?": """
+                    SELECT video_name, channel_name
+                    FROM channel
+                    JOIN playlist ON channel.channel_id = playlist.channel_id
+                    JOIN video ON playlist.playlist_id = video.playlist_id
+                    where comment_count = (select max(comment_count) from video)
+                """
+    }
+
+#Setting up the streamlit app
+import streamlit as st
+def main():
+    # YouTube service client setup
+    api_service_name = "youtube"
+    api_version = "v3"
+    youtube = build(api_service_name, api_version, developerKey="AIzaSyB1HEF02JEjhjEdGCUAzaQ6la2uOFOZ5V0")
+
+    # ============    /   Configuring Streamlit GUI   /    ============    #
+
+    st.set_page_config(layout='wide')
+    # Title
+    st.title(":red[YouTube] :orange[Data API and :red[Streamlit] Demo]")
+    # columns for fetching & migration
+    col1, col2 = st.columns(2)
+
+#Fetching data
+    with col1:
+        st.header(':orange[Data collection]')
+        st.write('''**Get :red[YouTube] channel details by entering valid channel_id**''')
+        # User input of channel_id
+        channel_id = st.text_input("Enter Channel ID")
+        st.write(
+            '''Click the **:blue['Get Channel Data']** button to get the channel details of the required channel_id.''')
+        if st.button(":green[Get Channel Data]"):
+            channel_data = get_channel_data(youtube, channel_id)
+            st.json(channel_data)
+
+    # ===============    /   Migration Section   /    ================    #
+
+    # # Retrieve existing channel IDs from MongoDB
+    existing_channel_ids = [item["ChannelId"] for item in db["migrated_channels"].find()]
+    with col2:
+        st.header(':orange[Data migration]')
+        st.write('''**Choose channel_id(s) from dropdown to store :red[YouTube] channel details**''')
+        # Retrieve existing channel IDs from MongoDB
+        # existing_channel_ids = [item["ChannelId"] for item in db["migrated_channels"].find()]
+
+        # Initialize the 'fetched_channel_ids' key with an empty list if it doesn't exist
+        fetched_channel_ids = st.session_state.setdefault('fetched_channel_ids', [])
+
+        # Convert fetched_channel_ids to a list if it's a string
+        # since channel_id is string & fetched_channel_ids need to be a list for ids to be appended
+        if isinstance(fetched_channel_ids, str):
+            fetched_channel_ids = [fetched_channel_ids]
+
+        # Check if the channel ID is not already in fetched_channel_ids
+        # Add the channel_id to the 'fetched_channel_ids' list
+        if channel_id not in fetched_channel_ids:
+            fetched_channel_ids.append(channel_id)
+
+        # Store the updated 'fetched_channel_ids' list in session state
+        st.session_state['fetched_channel_ids'] = fetched_channel_ids
+
+        # Store channel IDs in a multi-selectable dropdown
+        selected_channel_ids = st.multiselect("Select Channel IDs to migrate",
+                                              st.session_state.get('fetched_channel_ids', []))
+        st.write(''':red[*Click on **:blue['Migrate to MongoDB']** to save in **MongoDB**]''')
+        st.write(''':red[*Click on **:blue['Migrate to SQL']** to save in **SQL**]''')
+        if st.button(":green[Migrate to MongoDB]"):
+            for selected_id in selected_channel_ids:
+                try:
+                    migrate_data_to_mongodb(selected_id)
+                    st.write(f"Data migrated to MongoDB for Channel ID: {selected_id}")
+                    # existing_channel_ids.remove(selected_id)  # Remove migrated channel ID from the list
+                except ValueError as e:
+                    st.error(str(e))
+
+        if st.button(":green[Migrate to SQL]"):
+            for selected_id in selected_channel_ids:
+                try:
+                    migrate_data_to_sql(selected_id)
+                    st.write(f"Data migrated to PostgreSQL for Channel ID: {selected_id}")
+                except Exception as e:
+                    st.error("Error occurred during migration: {}".format(str(e)))
+
+    # Sidebar section
+    st.sidebar.header(':violet[Question Section]')
+
+    # Create a dropdown menu to select the question
+    selected_question = st.sidebar.selectbox("Select a question", list(queries.keys()))
+
+    if st.sidebar.button(":green[Display Data]"):
+        # Execute the selected query
+        selected_query = queries[selected_question]
+        with postgres_connection.cursor() as cursor:
+            cursor.execute(selected_query)
+            results = cursor.fetchall()
+
+        # Display the query results
+        if results:
+            st.sidebar.table(results)
+        else:
+            st.write("No results found.")
+
+
+if __name__ == "__main__":
+        main()
